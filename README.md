@@ -58,39 +58,70 @@ For the security-minded among you (and anyone who just likes reading about crypt
 - **CMake** 3.20 or newer
 - **Qt6** (Widgets and Svg modules)
 - **OpenSSL** (libcrypto)
-- A C++17 compiler (GCC, Clang, MSVC -- dealer's choice)
+- A C++17 compiler (GCC, Clang, or MSVC)
 
 ### Linux
 
+**1. Clone the repo**
+
 ```bash
-# install dependencies (Debian/Ubuntu)
+git clone https://github.com/T9Tuco/USBunker.git
+cd USBunker
+```
+
+**2. Install dependencies**
+
+```bash
+# Debian / Ubuntu
 sudo apt install cmake qt6-base-dev libqt6svg6-dev libssl-dev
 
-# install dependencies (Arch)
+# Arch / Manjaro
 sudo pacman -S cmake qt6-base qt6-svg openssl
 
-# build
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-make -j$(nproc)
+# Fedora
+sudo dnf install cmake qt6-qtbase-devel qt6-qtsvg-devel openssl-devel
+```
 
-# run
-./usbunker
+**3. Build and run**
+
+```bash
+cmake -B build -DCMAKE_BUILD_TYPE=Release
+cmake --build build -j$(nproc)
+./build/usbunker
 ```
 
 ### Windows
 
-```powershell
-# assuming Qt6 and OpenSSL are installed and in your PATH
-mkdir build && cd build
-cmake .. -DCMAKE_BUILD_TYPE=Release
-cmake --build . --config Release
+**1. Install dependencies**
 
-# run
-.\Release\usbunker.exe
+- **Qt6**: Download the installer from [qt.io/download-open-source](https://www.qt.io/download-open-source). During installation select the *MSVC 2022 64-bit* (or MinGW) component under Qt 6.x.
+- **OpenSSL**: Install via winget or download a pre-built binary from [slproweb.com/products/Win32OpenSSL.html](https://slproweb.com/products/Win32OpenSSL.html).
+
+```powershell
+winget install ShiningLight.OpenSSL
 ```
 
-Or open the project in Qt Creator and hit the big green play button. We don't judge.
+- **CMake**: `winget install Kitware.CMake`
+- **MSVC**: Install [Visual Studio](https://visualstudio.microsoft.com/) with the *Desktop development with C++* workload, or use the Build Tools variant.
+
+**2. Clone the repo**
+
+```powershell
+git clone https://github.com/TucoT9/USBunker.git
+cd USBunker
+```
+
+**3. Build and run**
+
+Replace `C:\Qt\6.x.x\msvc2022_64` with your actual Qt installation path:
+
+```powershell
+cmake -B build -DCMAKE_BUILD_TYPE=Release -DCMAKE_PREFIX_PATH="C:\Qt\6.x.x\msvc2022_64"
+cmake --build build --config Release
+.\build\Release\usbunker.exe
+```
+
+Alternatively, open the project folder in Qt Creator and click the Run button -- it handles the Qt path automatically.
 
 ## Usage
 
