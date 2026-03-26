@@ -1,7 +1,7 @@
 <p align="center">
   <img src="https://github.com/user-attachments/assets/02dc5dc8-37f5-4744-95a1-2dca28496e38" 
        alt="USBunker Screenshot" 
-       width="800" 
+       width="600" 
        height="auto">
 </p>
 
