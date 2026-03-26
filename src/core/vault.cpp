@@ -86,12 +86,20 @@ Bytes packTable(const std::vector<FileEntry>& entries) {
 }
 
 std::vector<FileEntry> unpackTable(const Bytes& buf, uint64_t count) {
-    std::vector<FileEntry> entries;
-    size_t pos = 0;
-    size_t end = buf.size();
-
     // per entry: 4 (path_len) + path + 8 (size) + 1 (flags) + IV + TAG + 8 (offset)
     constexpr size_t fixedPerEntry = 4 + 8 + 1 + crypto::IV_LEN + crypto::TAG_LEN + 8;
+
+    // a single entry can't be smaller than fixedPerEntry bytes; reject absurd counts early
+    if (count > buf.size() / fixedPerEntry + 1)
+        throw std::runtime_error("Corrupted vault: implausible file count.");
+    // also guard against count overflowing size_t on 32-bit targets
+    if (count > std::numeric_limits<size_t>::max())
+        throw std::runtime_error("Corrupted vault: file count out of range.");
+
+    std::vector<FileEntry> entries;
+    entries.reserve(static_cast<size_t>(count));
+    size_t pos = 0;
+    size_t end = buf.size();
 
     for (uint64_t i = 0; i < count; i++) {
         if (pos + fixedPerEntry > end)
@@ -220,7 +228,10 @@ void VaultWorker::encrypt(const QString& drivePath, const QString& password) {
 
         // placeholder header, we come back to fill it in
         Bytes hdrBuf(HEADER_SIZE, 0);
-        vault.write(reinterpret_cast<const char*>(hdrBuf.data()), HEADER_SIZE);
+        if (vault.write(reinterpret_cast<const char*>(hdrBuf.data()), HEADER_SIZE) != HEADER_SIZE) {
+            emit finished(false, "Write error: disk may be full.");
+            return;
+        }
 
         // encrypt each file and stream to vault
         uint64_t done = 0;
@@ -248,11 +259,18 @@ void VaultWorker::encrypt(const QString& drivePath, const QString& password) {
 
             while (!src.atEnd()) {
                 QByteArray chunk = src.read(CHUNK_SIZE);
+                if (chunk.isEmpty()) break; // unexpected read failure
                 Bytes ct = enc.update(
                     reinterpret_cast<const uint8_t*>(chunk.constData()),
                     static_cast<int>(chunk.size()));
-                vault.write(reinterpret_cast<const char*>(ct.data()),
-                            ct.size());
+                if (vault.write(reinterpret_cast<const char*>(ct.data()),
+                                static_cast<qint64>(ct.size())) != static_cast<qint64>(ct.size())) {
+                    src.close();
+                    vault.close();
+                    QFile::remove(vaultPath);
+                    emit finished(false, "Write error: disk may be full.");
+                    return;
+                }
                 done += chunk.size();
 
                 pct = 10 + static_cast<int>(
@@ -341,7 +359,10 @@ void VaultWorker::decrypt(const QString& drivePath, const QString& password) {
 
         emit progress(5, "Reading vault...");
         Bytes hdrBuf(HEADER_SIZE);
-        vault.read(reinterpret_cast<char*>(hdrBuf.data()), HEADER_SIZE);
+        if (vault.read(reinterpret_cast<char*>(hdrBuf.data()), HEADER_SIZE) != HEADER_SIZE) {
+            emit finished(false, "Vault file is truncated or unreadable.");
+            return;
+        }
         VaultHeader hdr = unpackHeader(hdrBuf);
 
         if (hdr.version != FORMAT_VERSION) {
@@ -370,9 +391,18 @@ void VaultWorker::decrypt(const QString& drivePath, const QString& password) {
             emit finished(false, "Vault file is corrupted or truncated.");
             return;
         }
-        vault.seek(hdr.tableOff);
+        if (!vault.seek(hdr.tableOff)) {
+            crypto::wipe(key);
+            emit finished(false, "Vault file is corrupted or truncated.");
+            return;
+        }
         Bytes tableCt(hdr.tableSize);
-        vault.read(reinterpret_cast<char*>(tableCt.data()), hdr.tableSize);
+        if (vault.read(reinterpret_cast<char*>(tableCt.data()),
+                       static_cast<qint64>(hdr.tableSize)) != static_cast<qint64>(hdr.tableSize)) {
+            crypto::wipe(key);
+            emit finished(false, "Vault file is truncated or unreadable.");
+            return;
+        }
 
         Bytes tableRaw = crypto::decrypt(tableCt, key, hdr.tableIV, hdr.tableTag);
         auto entries = unpackTable(tableRaw, hdr.fileCount);
@@ -414,6 +444,7 @@ void VaultWorker::decrypt(const QString& drivePath, const QString& password) {
 
             QFile out(outPath);
             if (!out.open(QIODevice::WriteOnly)) {
+                crypto::wipe(key);
                 emit finished(false, "Cannot write: " + outPath);
                 return;
             }
@@ -426,6 +457,12 @@ void VaultWorker::decrypt(const QString& drivePath, const QString& password) {
                 int chunk = static_cast<int>(
                     std::min(remaining, uint64_t(CHUNK_SIZE)));
                 QByteArray raw = vault.read(chunk);
+                if (raw.isEmpty()) {
+                    out.close();
+                    crypto::wipe(key);
+                    emit finished(false, "Unexpected end of vault file.");
+                    return;
+                }
                 Bytes plain = dec.update(
                     reinterpret_cast<const uint8_t*>(raw.constData()),
                     static_cast<int>(raw.size()));

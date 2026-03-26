@@ -21,6 +21,7 @@ protected:
 private:
     int   m_value = 0;
     qreal m_sweep = 0;
+    QPropertyAnimation* m_anim = nullptr;
 
     qreal sweepAngle() const { return m_sweep; }
     void  setSweepAngle(qreal a) { m_sweep = a; update(); }
@@ -65,6 +66,7 @@ private:
     int    m_score = 0;
     qreal  m_barWidth = 0;
     QColor m_color{"#21262d"};
+    QPropertyAnimation* m_anim = nullptr;
 
     qreal barWidth() const { return m_barWidth; }
     void  setBarWidth(qreal w) { m_barWidth = w; update(); }

@@ -18,12 +18,15 @@ void ProgressRing::setValue(int percent) {
     m_value = qBound(0, percent, 100);
     qreal target = m_value * 3.6;
 
-    auto* anim = new QPropertyAnimation(this, "sweepAngle");
-    anim->setDuration(350);
-    anim->setStartValue(m_sweep);
-    anim->setEndValue(target);
-    anim->setEasingCurve(QEasingCurve::OutCubic);
-    anim->start(QAbstractAnimation::DeleteWhenStopped);
+    if (m_anim) { m_anim->stop(); m_anim = nullptr; }
+    m_anim = new QPropertyAnimation(this, "sweepAngle", this);
+    m_anim->setDuration(350);
+    m_anim->setStartValue(m_sweep);
+    m_anim->setEndValue(target);
+    m_anim->setEasingCurve(QEasingCurve::OutCubic);
+    connect(m_anim, &QPropertyAnimation::finished,
+            this, [this]() { m_anim = nullptr; });
+    m_anim->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
 void ProgressRing::paintEvent(QPaintEvent*) {
@@ -184,12 +187,15 @@ void StrengthMeter::setScore(int score) {
     m_color = palette[m_score];
 
     qreal target = m_score / 4.0;
-    auto* anim = new QPropertyAnimation(this, "barWidth");
-    anim->setDuration(280);
-    anim->setStartValue(m_barWidth);
-    anim->setEndValue(target);
-    anim->setEasingCurve(QEasingCurve::OutCubic);
-    anim->start(QAbstractAnimation::DeleteWhenStopped);
+    if (m_anim) { m_anim->stop(); m_anim = nullptr; }
+    m_anim = new QPropertyAnimation(this, "barWidth", this);
+    m_anim->setDuration(280);
+    m_anim->setStartValue(m_barWidth);
+    m_anim->setEndValue(target);
+    m_anim->setEasingCurve(QEasingCurve::OutCubic);
+    connect(m_anim, &QPropertyAnimation::finished,
+            this, [this]() { m_anim = nullptr; });
+    m_anim->start(QAbstractAnimation::DeleteWhenStopped);
 }
 
 void StrengthMeter::paintEvent(QPaintEvent*) {
