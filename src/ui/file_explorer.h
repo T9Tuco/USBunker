@@ -6,6 +6,8 @@
 #include <QLabel>
 #include <QPushButton>
 #include <QFileIconProvider>
+#include <QMenu>
+#include <QClipboard>
 
 namespace bunker::ui {
 
@@ -27,18 +29,36 @@ public:
 private slots:
     void onItemActivated(const QModelIndex& index);
     void goUp();
+    void showContextMenu(const QPoint& pos);
+
+    void openSelected();
+    void renameSelected();
+    void deleteSelected();
+    void createFolder();
+    void copySelected();
+    void cutSelected();
+    void pasteItems();
 
 private:
     void navigateTo(const QString& path);
     void updatePathLabel();
+    void updateToolbar();
+    bool copyRecursive(const QString& src, const QString& dst);
+    QStringList selectedPaths();
 
     QTreeView*          tree         = nullptr;
     QFileSystemModel*   model        = nullptr;
     BunkerIconProvider* icons        = nullptr;
     QLabel*             pathLabel    = nullptr;
     QPushButton*        upBtn        = nullptr;
+    QPushButton*        newFolderBtn = nullptr;
+    QPushButton*        pasteBtn     = nullptr;
+    QPushButton*        deleteBtn    = nullptr;
     QString             basePath;
     QString             currentPath;
+
+    QStringList         clipboard;
+    bool                clipboardIsCut = false;
 };
 
 }

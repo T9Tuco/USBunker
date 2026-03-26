@@ -163,6 +163,34 @@ QScrollBar::add-page:vertical, QScrollBar::sub-page:vertical {
     border: none;
 }
 
+QMenu {
+    background-color: #161b22;
+    border: 1px solid #30363d;
+    border-radius: 8px;
+    padding: 4px 0;
+    color: #e6edf3;
+    font-size: 13px;
+}
+
+QMenu::item {
+    padding: 6px 24px;
+}
+
+QMenu::item:selected {
+    background-color: #1a3a4a;
+}
+
+QMenu::separator {
+    height: 1px;
+    background: #21262d;
+    margin: 4px 8px;
+}
+
+QInputDialog, QMessageBox {
+    background-color: #0d1117;
+    color: #e6edf3;
+}
+
 QScrollBar:horizontal {
     background: transparent;
     height: 8px;
