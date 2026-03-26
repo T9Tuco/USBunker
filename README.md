@@ -7,6 +7,11 @@
 
 # USBunker
 
+[![Build](https://github.com/T9Tuco/USBunker/actions/workflows/release.yml/badge.svg)](https://github.com/T9Tuco/USBunker/actions/workflows/release.yml)
+[![CI](https://github.com/T9Tuco/USBunker/actions/workflows/ci.yml/badge.svg)](https://github.com/T9Tuco/USBunker/actions/workflows/ci.yml)
+[![Latest Release](https://img.shields.io/github/v/release/T9Tuco/USBunker)](https://github.com/T9Tuco/USBunker/releases/latest)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE)
+
 Your USB drive's personal bodyguard. Because even flash drives deserve some privacy.
 
 USBunker is a desktop application that encrypts the entire contents of a USB drive into a single AES-256-GCM vault file. No cloud, no account, no subscription -- just a password and your data stays yours.
