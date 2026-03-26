@@ -1,0 +1,59 @@
+name: Build & Release Windows EXE
+
+on:
+  push:
+    tags:
+      - "v*"
+
+permissions:
+  contents: write
+
+jobs:
+  build-windows:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Install Qt6
+        uses: jurplel/install-qt-action@v4
+        with:
+          version: "6.8.3"
+          host: windows
+          target: desktop
+          arch: win64_msvc2022_64
+          modules: ""
+
+      - name: Install OpenSSL
+        run: choco install openssl --no-progress -y
+
+      - name: Configure
+        run: |
+          cmake -B build `
+            -DCMAKE_BUILD_TYPE=Release `
+            -DCMAKE_PREFIX_PATH="$env:Qt6_DIR"
+
+      - name: Build
+        run: cmake --build build --config Release -j4
+
+      - name: Bundle Qt dependencies
+        run: |
+          mkdir dist
+          copy build\Release\usbunker.exe dist\
+          & "$env:Qt6_DIR\bin\windeployqt.exe" --release dist\usbunker.exe
+
+      - name: Copy OpenSSL DLLs
+        run: |
+          $ssl = (Get-Command openssl.exe).Source | Split-Path
+          copy "$ssl\libssl-*.dll" dist\ -ErrorAction SilentlyContinue
+          copy "$ssl\libcrypto-*.dll" dist\ -ErrorAction SilentlyContinue
+
+      - name: Zip release
+        run: Compress-Archive -Path dist\* -DestinationPath USBunker-windows-x64.zip
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          files: USBunker-windows-x64.zip
+          generate_release_notes: true
