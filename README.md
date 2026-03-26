@@ -15,6 +15,14 @@ Think of it as putting your USB stick into a bunker. A *really* small bunker. Th
 
 ---
 
+## Download
+
+**Windows**: grab the latest `USBunker-windows-x64.zip` from the [Releases](https://github.com/T9Tuco/USBunker/releases) page, unzip, and run `usbunker.exe` -- no installation needed, all dependencies are bundled.
+
+**Linux**: build from source (see [Building](#building) below).
+
+---
+
 ## What It Does
 
 You plug in a USB stick, click **Encrypt**, pick a password, and USBunker packs every file on the drive into an encrypted vault. The original files are removed. To get them back, open USBunker, plug in the drive, and hit **Decrypt**.
