@@ -1,0 +1,17 @@
+<RCC>
+    <qresource prefix="/">
+        <file>icons/shield.svg</file>
+        <file>icons/lock.svg</file>
+        <file>icons/unlock.svg</file>
+        <file>icons/check.svg</file>
+        <file>icons/usb.svg</file>
+        <file>icons/folder.svg</file>
+        <file>icons/file.svg</file>
+        <file>icons/image.svg</file>
+        <file>icons/video.svg</file>
+        <file>icons/audio.svg</file>
+        <file>icons/document.svg</file>
+        <file>icons/archive.svg</file>
+        <file>icons/code.svg</file>
+    </qresource>
+</RCC>
