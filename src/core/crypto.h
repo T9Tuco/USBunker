@@ -29,6 +29,10 @@ Sealed encrypt(const Bytes& data, const Bytes& key, const Bytes& iv);
 Bytes  decrypt(const Bytes& ciphertext, const Bytes& key,
                const Bytes& iv, const Bytes& tag);
 
+void wipe(void* ptr, size_t len);
+void wipe(Bytes& data);
+void wipe(std::string& str);
+
 class StreamEncryptor {
 public:
     StreamEncryptor(const Bytes& key, const Bytes& iv);

@@ -451,6 +451,10 @@ void MainWindow::submitPassword() {
         }
     }
 
+    // grab password and immediately wipe the input fields
+    pwInput->clear();
+    pwConfirm->clear();
+
     switchTo(Progress);
     ring->setValue(0);
     ringStatus->setText("Starting...");

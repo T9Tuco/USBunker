@@ -5,6 +5,7 @@
 #include <QFileInfo>
 #include <algorithm>
 #include <cstring>
+#include <limits>
 
 namespace bunker {
 
@@ -43,6 +44,8 @@ Bytes packHeader(const VaultHeader& h) {
 }
 
 VaultHeader unpackHeader(const Bytes& buf) {
+    if (buf.size() < HEADER_SIZE)
+        throw std::runtime_error("Vault header is truncated.");
     if (std::memcmp(buf.data(), VAULT_MAGIC, 8) != 0)
         throw std::runtime_error("Not a USBunker vault.");
 
@@ -85,10 +88,26 @@ Bytes packTable(const std::vector<FileEntry>& entries) {
 std::vector<FileEntry> unpackTable(const Bytes& buf, uint64_t count) {
     std::vector<FileEntry> entries;
     size_t pos = 0;
+    size_t end = buf.size();
+
+    // per entry: 4 (path_len) + path + 8 (size) + 1 (flags) + IV + TAG + 8 (offset)
+    constexpr size_t fixedPerEntry = 4 + 8 + 1 + crypto::IV_LEN + crypto::TAG_LEN + 8;
+
     for (uint64_t i = 0; i < count; i++) {
-        FileEntry e;
+        if (pos + fixedPerEntry > end)
+            throw std::runtime_error("Corrupted vault: file table truncated.");
+
         uint32_t plen = get32(buf.data() + pos); pos += 4;
+
+        if (plen > 4096 || pos + plen > end)
+            throw std::runtime_error("Corrupted vault: invalid path length.");
+
+        FileEntry e;
         e.path.assign(buf.begin() + pos, buf.begin() + pos + plen); pos += plen;
+
+        if (pos + 8 + 1 + crypto::IV_LEN + crypto::TAG_LEN + 8 > end)
+            throw std::runtime_error("Corrupted vault: file table truncated.");
+
         e.size  = get64(buf.data() + pos); pos += 8;
         e.isDir = buf[pos] != 0; pos += 1;
         e.iv.assign(buf.begin() + pos, buf.begin() + pos + crypto::IV_LEN);
@@ -135,6 +154,14 @@ ScanResult scanDrive(const QString& root) {
     return out;
 }
 
+bool isPathSafe(const QString& base, const QString& relative) {
+    if (relative.contains(".."))
+        return false;
+    QString resolved = QDir::cleanPath(QDir(base).filePath(relative));
+    QString root     = QDir::cleanPath(base);
+    return resolved.startsWith(root + "/") || resolved == root;
+}
+
 } // anon
 
 VaultWorker::VaultWorker(QObject* parent) : QObject(parent) {}
@@ -151,7 +178,9 @@ void VaultWorker::encrypt(const QString& drivePath, const QString& password) {
 
         emit progress(5, "Deriving encryption key...");
         Bytes salt = crypto::randomBytes(crypto::SALT_LEN);
-        Bytes key  = crypto::deriveKey(password.toStdString(), salt);
+        std::string pw = password.toStdString();
+        Bytes key  = crypto::deriveKey(pw, salt);
+        crypto::wipe(pw);
         Bytes kfp  = crypto::keyFingerprint(key);
 
         // build entry list (dirs first, then files)
@@ -168,13 +197,17 @@ void VaultWorker::encrypt(const QString& drivePath, const QString& password) {
         }
 
         for (auto& [path, sz] : scan.files) {
+            if (offset > std::numeric_limits<uint64_t>::max() - sz) {
+                emit finished(false, "Total file size exceeds maximum.");
+                return;
+            }
             FileEntry e;
             e.path       = path;
             e.size       = sz;
             e.iv         = crypto::randomBytes(crypto::IV_LEN);
             e.tag.resize(crypto::TAG_LEN, 0);
             e.dataOffset = offset;
-            offset += sz; // GCM ciphertext is same length as plaintext
+            offset += sz;
             entries.push_back(std::move(e));
         }
 
@@ -264,13 +297,16 @@ void VaultWorker::encrypt(const QString& drivePath, const QString& password) {
                     packedHdr.size());
         vault.close();
 
-        // wipe originals
+        // wipe originals (skip symlinks to prevent TOCTOU attacks)
         emit progress(94, "Removing original files...");
         for (auto& entry : entries) {
-            if (!entry.isDir) {
-                QFile::remove(QDir(drivePath).filePath(
-                    QString::fromStdString(entry.path)));
-            }
+            if (entry.isDir) continue;
+            QString target = QDir(drivePath).filePath(
+                QString::fromStdString(entry.path));
+            QFileInfo fi(target);
+            if (fi.isSymLink()) continue;
+            if (!fi.isFile())   continue;
+            QFile::remove(target);
         }
         // dirs deepest first
         std::vector<std::string> dirList;
@@ -284,11 +320,13 @@ void VaultWorker::encrypt(const QString& drivePath, const QString& password) {
         for (auto& d : dirList)
             root.rmdir(QString::fromStdString(d));
 
+        crypto::wipe(key);
+
         emit progress(100, "Done.");
         emit finished(true, "Drive encrypted successfully.");
 
     } catch (const std::exception& ex) {
-        emit finished(false, QString("Encryption failed: %1").arg(ex.what()));
+        emit finished(false, "Encryption failed.");
     }
 }
 
@@ -312,16 +350,26 @@ void VaultWorker::decrypt(const QString& drivePath, const QString& password) {
         }
 
         emit progress(8, "Verifying password...");
-        Bytes key = crypto::deriveKey(password.toStdString(), hdr.salt);
+        std::string pw = password.toStdString();
+        Bytes key = crypto::deriveKey(pw, hdr.salt);
+        crypto::wipe(pw);
         Bytes kfp = crypto::keyFingerprint(key);
 
         if (kfp != hdr.keyCheck) {
+            crypto::wipe(key);
             emit finished(false, "Wrong password.");
             return;
         }
 
         // read and decrypt file table
         emit progress(14, "Reading file table...");
+        qint64 vaultSize = vault.size();
+        if (hdr.tableOff > static_cast<uint64_t>(vaultSize) ||
+            hdr.tableSize > static_cast<uint64_t>(vaultSize) - hdr.tableOff) {
+            crypto::wipe(key);
+            emit finished(false, "Vault file is corrupted or truncated.");
+            return;
+        }
         vault.seek(hdr.tableOff);
         Bytes tableCt(hdr.tableSize);
         vault.read(reinterpret_cast<char*>(tableCt.data()), hdr.tableSize);
@@ -332,6 +380,17 @@ void VaultWorker::decrypt(const QString& drivePath, const QString& password) {
         uint64_t totalBytes = 0;
         for (auto& e : entries)
             if (!e.isDir) totalBytes += e.size;
+
+        // validate all paths before writing anything
+        for (auto& e : entries) {
+            QString rel = QString::fromStdString(e.path);
+            if (!isPathSafe(drivePath, rel)) {
+                crypto::wipe(key);
+                emit finished(false,
+                    "Vault contains unsafe path: " + rel);
+                return;
+            }
+        }
 
         // restore directories
         QDir root(drivePath);
@@ -394,11 +453,13 @@ void VaultWorker::decrypt(const QString& drivePath, const QString& password) {
         emit progress(98, "Cleaning up...");
         QFile::remove(vaultPath);
 
+        crypto::wipe(key);
+
         emit progress(100, "Done.");
         emit finished(true, "Drive decrypted successfully.");
 
     } catch (const std::exception& ex) {
-        emit finished(false, QString("Decryption failed: %1").arg(ex.what()));
+        emit finished(false, "Decryption failed.");
     }
 }
 

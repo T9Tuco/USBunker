@@ -2,6 +2,7 @@
 #include <openssl/evp.h>
 #include <openssl/rand.h>
 #include <openssl/hmac.h>
+#include <openssl/crypto.h>
 #include <cstring>
 
 namespace bunker::crypto {
@@ -39,9 +40,28 @@ Bytes keyFingerprint(const Bytes& key) {
     return out;
 }
 
+// -- secure memory wipe --
+
+void wipe(void* ptr, size_t len) {
+    OPENSSL_cleanse(ptr, len);
+}
+
+void wipe(Bytes& data) {
+    if (!data.empty()) OPENSSL_cleanse(data.data(), data.size());
+    data.clear();
+}
+
+void wipe(std::string& str) {
+    if (!str.empty()) OPENSSL_cleanse(str.data(), str.size());
+    str.clear();
+}
+
 // -- one-shot encrypt/decrypt --
 
 Sealed encrypt(const Bytes& data, const Bytes& key, const Bytes& iv) {
+    if (key.size() != KEY_LEN) throw CryptoError("invalid key size");
+    if (iv.size()  != IV_LEN)  throw CryptoError("invalid IV size");
+
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx) throw CryptoError("cipher context allocation failed");
 
@@ -84,6 +104,10 @@ Sealed encrypt(const Bytes& data, const Bytes& key, const Bytes& iv) {
 
 Bytes decrypt(const Bytes& ciphertext, const Bytes& key,
               const Bytes& iv, const Bytes& tag) {
+    if (key.size() != KEY_LEN) throw CryptoError("invalid key size");
+    if (iv.size()  != IV_LEN)  throw CryptoError("invalid IV size");
+    if (tag.size() != TAG_LEN) throw CryptoError("invalid auth tag size");
+
     EVP_CIPHER_CTX* ctx = EVP_CIPHER_CTX_new();
     if (!ctx) throw CryptoError("cipher context allocation failed");
 
@@ -132,6 +156,9 @@ struct StreamEncryptor::Ctx {
 StreamEncryptor::StreamEncryptor(const Bytes& key, const Bytes& iv)
     : m(std::make_unique<Ctx>())
 {
+    if (key.size() != KEY_LEN) throw CryptoError("invalid key size");
+    if (iv.size()  != IV_LEN)  throw CryptoError("invalid IV size");
+
     m->handle = EVP_CIPHER_CTX_new();
     if (!m->handle) throw CryptoError("cipher context allocation failed");
 
@@ -181,6 +208,10 @@ struct StreamDecryptor::Ctx {
 StreamDecryptor::StreamDecryptor(const Bytes& key, const Bytes& iv, const Bytes& tag)
     : m(std::make_unique<Ctx>())
 {
+    if (key.size() != KEY_LEN) throw CryptoError("invalid key size");
+    if (iv.size()  != IV_LEN)  throw CryptoError("invalid IV size");
+    if (tag.size() != TAG_LEN) throw CryptoError("invalid auth tag size");
+
     m->handle = EVP_CIPHER_CTX_new();
     m->expectedTag = tag;
     if (!m->handle) throw CryptoError("cipher context allocation failed");
