@@ -41,7 +41,7 @@ jobs:
         run: |
           mkdir dist
           copy build\Release\usbunker.exe dist\
-          & "$env:Qt6_DIR\bin\windeployqt.exe" --release dist\usbunker.exe
+          windeployqt --release dist\usbunker.exe
 
       - name: Copy OpenSSL DLLs
         run: |
