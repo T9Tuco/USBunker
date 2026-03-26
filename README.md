@@ -1,4 +1,10 @@
-<img width="1408" height="768" alt="Gemini_Generated_Image_abc4d2abc4d2abc4" src="https://github.com/user-attachments/assets/02dc5dc8-37f5-4744-95a1-2dca28496e38" />
+<p align="center">
+  <img src="https://github.com/user-attachments/assets/02dc5dc8-37f5-4744-95a1-2dca28496e38" 
+       alt="USBunker Screenshot" 
+       width="800" 
+       height="auto">
+</p>
+
 # USBunker
 
 Your USB drive's personal bodyguard. Because even flash drives deserve some privacy.
