@@ -58,3 +58,11 @@ desktop.ini
 *.env
 *.pem
 *.key
+
+# AUR packaging (lives in its own repo, not here)
+.SRCINFO
+pkg/
+src/
+*.tar.gz
+*.pkg.tar.zst
+*.pkg.tar.xz
