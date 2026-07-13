@@ -151,6 +151,9 @@ ScanResult scanDrive(const QString& root) {
         if (rel.startsWith(".Trash")) continue;
 
         QFileInfo fi = it.fileInfo();
+        // never follow symlinks: a planted symlink could point outside the
+        // drive and leak arbitrary host files into the vault on encrypt
+        if (fi.isSymLink()) continue;
         if (fi.isDir()) {
             out.dirs.push_back(rel.toStdString());
         } else {
@@ -167,14 +170,27 @@ bool isPathSafe(const QString& base, const QString& relative) {
         return false;
     QString resolved = QDir::cleanPath(QDir(base).filePath(relative));
     QString root     = QDir::cleanPath(base);
-    return resolved.startsWith(root + "/") || resolved == root;
+    if (!(resolved.startsWith(root + "/") || resolved == root))
+        return false;
+
+    // reject if any existing path component is a symlink -- a pre-planted
+    // symlink on the drive could otherwise redirect a decrypted write
+    // outside the drive even though the logical path itself looks safe
+    QString cur = root;
+    for (const QString& part : relative.split('/', Qt::SkipEmptyParts)) {
+        cur = QDir(cur).filePath(part);
+        QFileInfo fi(cur);
+        if (fi.exists() && fi.isSymLink())
+            return false;
+    }
+    return true;
 }
 
 } // anon
 
 VaultWorker::VaultWorker(QObject* parent) : QObject(parent) {}
 
-void VaultWorker::encrypt(const QString& drivePath, const QString& password) {
+void VaultWorker::encrypt(const QString& drivePath, const std::string& password) {
     try {
         emit progress(0, "Scanning files...");
         auto scan = scanDrive(drivePath);
@@ -186,9 +202,7 @@ void VaultWorker::encrypt(const QString& drivePath, const QString& password) {
 
         emit progress(5, "Deriving encryption key...");
         Bytes salt = crypto::randomBytes(crypto::SALT_LEN);
-        std::string pw = password.toStdString();
-        Bytes key  = crypto::deriveKey(pw, salt);
-        crypto::wipe(pw);
+        Bytes key  = crypto::deriveKey(password, salt);
         Bytes kfp  = crypto::keyFingerprint(key);
 
         // build entry list (dirs first, then files)
@@ -348,7 +362,7 @@ void VaultWorker::encrypt(const QString& drivePath, const QString& password) {
     }
 }
 
-void VaultWorker::decrypt(const QString& drivePath, const QString& password) {
+void VaultWorker::decrypt(const QString& drivePath, const std::string& password) {
     try {
         QString vaultPath = QDir(drivePath).filePath(VAULT_FILE);
         QFile vault(vaultPath);
@@ -371,12 +385,10 @@ void VaultWorker::decrypt(const QString& drivePath, const QString& password) {
         }
 
         emit progress(8, "Verifying password...");
-        std::string pw = password.toStdString();
-        Bytes key = crypto::deriveKey(pw, hdr.salt);
-        crypto::wipe(pw);
+        Bytes key = crypto::deriveKey(password, hdr.salt);
         Bytes kfp = crypto::keyFingerprint(key);
 
-        if (kfp != hdr.keyCheck) {
+        if (!crypto::constantTimeEqual(kfp, hdr.keyCheck)) {
             crypto::wipe(key);
             emit finished(false, "Wrong password.");
             return;

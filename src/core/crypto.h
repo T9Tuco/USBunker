@@ -25,6 +25,9 @@ Bytes randomBytes(int count);
 Bytes deriveKey(const std::string& password, const Bytes& salt);
 Bytes keyFingerprint(const Bytes& key);
 
+// constant-time comparison for secret-derived values (avoids timing side channels)
+bool constantTimeEqual(const Bytes& a, const Bytes& b);
+
 Sealed encrypt(const Bytes& data, const Bytes& key, const Bytes& iv);
 Bytes  decrypt(const Bytes& ciphertext, const Bytes& key,
                const Bytes& iv, const Bytes& tag);

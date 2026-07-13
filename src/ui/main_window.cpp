@@ -1,5 +1,6 @@
 #include "main_window.h"
 #include "style.h"
+#include "core/crypto.h"
 
 #include <QApplication>
 #include <QVBoxLayout>
@@ -11,8 +12,22 @@
 #include <QRegularExpression>
 #include <QIcon>
 #include <QStyle>
+#include <openssl/crypto.h>
+#include <memory>
 
 namespace bunker::ui {
+
+namespace {
+// QString is copy-on-write and clear()/destruction never scrubs the
+// underlying heap buffer, so password material would otherwise linger in
+// memory; overwrite it in place before releasing it.
+void wipeQString(QString& s) {
+    if (!s.isEmpty())
+        OPENSSL_cleanse(static_cast<void*>(s.data()),
+                         static_cast<size_t>(s.size()) * sizeof(QChar));
+    s.clear();
+}
+}
 
 MainWindow::MainWindow(QWidget* parent) : QMainWindow(parent) {
     setWindowTitle("USBunker");
@@ -444,14 +459,20 @@ void MainWindow::submitPassword() {
             pwError->setVisible(true);
             return;
         }
-        if (pw != pwConfirm->text()) {
+        QString confirm = pwConfirm->text();
+        bool mismatch = pw != confirm;
+        wipeQString(confirm);
+        if (mismatch) {
             pwError->setText("Passwords do not match.");
             pwError->setVisible(true);
             return;
         }
     }
 
-    // grab password and immediately wipe the input fields
+    // move the password into a wipeable buffer immediately and scrub every
+    // QString copy we made along the way, then clear the input fields
+    auto pwBuf = std::make_shared<std::string>(pw.toStdString());
+    wipeQString(pw);
     pwInput->clear();
     pwConfirm->clear();
 
@@ -474,10 +495,16 @@ void MainWindow::submitPassword() {
 
     if (encrypting) {
         connect(workerThread, &QThread::started, worker,
-                [w = worker, path, pw]() { w->encrypt(path, pw); });
+                [w = worker, path, pwBuf]() {
+                    w->encrypt(path, *pwBuf);
+                    crypto::wipe(*pwBuf);
+                });
     } else {
         connect(workerThread, &QThread::started, worker,
-                [w = worker, path, pw]() { w->decrypt(path, pw); });
+                [w = worker, path, pwBuf]() {
+                    w->decrypt(path, *pwBuf);
+                    crypto::wipe(*pwBuf);
+                });
     }
 
     workerThread->start();

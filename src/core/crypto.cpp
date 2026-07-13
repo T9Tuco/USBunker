@@ -40,6 +40,11 @@ Bytes keyFingerprint(const Bytes& key) {
     return out;
 }
 
+bool constantTimeEqual(const Bytes& a, const Bytes& b) {
+    if (a.size() != b.size()) return false;
+    return CRYPTO_memcmp(a.data(), b.data(), a.size()) == 0;
+}
+
 // -- secure memory wipe --
 
 void wipe(void* ptr, size_t len) {

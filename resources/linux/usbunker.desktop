@@ -1,0 +1,9 @@
+[Desktop Entry]
+Type=Application
+Name=USBunker
+Comment=Encrypt and decrypt USB drives
+Exec=usbunker
+Icon=usbunker
+Categories=Utility;Security;
+Terminal=false
+StartupNotify=true

@@ -39,8 +39,10 @@ public:
     explicit VaultWorker(QObject* parent = nullptr);
 
 public slots:
-    void encrypt(const QString& drivePath, const QString& password);
-    void decrypt(const QString& drivePath, const QString& password);
+    // password is taken by reference and is NOT wiped here -- the caller
+    // owns the buffer and is responsible for scrubbing it after the call
+    void encrypt(const QString& drivePath, const std::string& password);
+    void decrypt(const QString& drivePath, const std::string& password);
 
 signals:
     void progress(int percent, const QString& status);
